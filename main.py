@@ -9,14 +9,21 @@ from contextlib import asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    app.state.mongo_conn = AsyncIOMotorClient(settings.MONGODB_URL)
-    app.state.db_client = app.state.mongo_conn[settings.MONGODB_DATABASE]
+    mongo_conn = AsyncIOMotorClient(
+        settings.MONGODB_URL,
+        serverSelectionTimeoutMS=5000,
+    )
 
     try:
-        # Application runs while execution is paused here.
+        # Verify that MongoDB is reachable.
+        await mongo_conn.admin.command("ping")
+
+        app.state.mongo_conn = mongo_conn
+        app.state.db_client = mongo_conn[settings.MONGODB_DATABASE]
+
         yield
     finally:
-        app.state.mongo_conn.close()
+        mongo_conn.close()
 
 
 app = FastAPI(lifespan=lifespan)
