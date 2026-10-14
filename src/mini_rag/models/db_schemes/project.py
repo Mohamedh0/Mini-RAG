@@ -34,3 +34,18 @@ class Project(BaseModel):
         if not (value.isascii() and value.isalnum()):
             raise ValueError("project_id must be alphanumeric (A-Z, a-z, 0-9)")
         return value
+
+
+    @classmethod
+    def get_indexes(cls):
+
+        return [
+            {
+                "key":[
+                    ("project_id", 1)
+                ],
+                "name": "project_id_index_1",
+                "unique": True
+            }
+        ]
+    
