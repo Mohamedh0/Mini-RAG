@@ -4,6 +4,7 @@ from mini_rag.routes import base, data
 from motor.motor_asyncio import AsyncIOMotorClient
 from src.mini_rag.helpers.config import get_settings
 from src.mini_rag.stores.llm.LLMProviderFactory import LLMProviderFactory
+from src.mini_rag.stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -24,6 +25,7 @@ async def lifespan(app: FastAPI):
         app.state.db_client = mongo_conn[settings.MONGODB_DATABASE]
 
         llm_provider_factory = LLMProviderFactory(settings)
+        vectordb_provider_factory = VectorDBProviderFactory(settings)
 
         # generation client
         app.state.generation_client = llm_provider_factory.create(
@@ -42,11 +44,18 @@ async def lifespan(app: FastAPI):
             embedding_size=settings.EMBEDDING_MODEL_SIZE,
         )
 
+        # vector db client
+        app.vectordb_client = vectordb_provider_factory.create(
+            provider=settings.VECTOR_DB_BACKEND
+        )
+        app.vectordb_client.connect()
+
         yield  # ---- App serves requests here ----
 
     finally:
         # ---- Shutdown ----
         mongo_conn.close()
+        app.vectordb_client.disconnect()
 
 
 app = FastAPI(lifespan=lifespan)
