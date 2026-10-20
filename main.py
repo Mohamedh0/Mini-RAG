@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from mini_rag.routes import base, data
+from mini_rag.routes import base, data, nlp
 from motor.motor_asyncio import AsyncIOMotorClient
 from src.mini_rag.helpers.config import get_settings
 from src.mini_rag.stores.llm.LLMProviderFactory import LLMProviderFactory
@@ -11,14 +11,13 @@ from contextlib import asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    # ---- Startup ----
     mongo_conn = AsyncIOMotorClient(
         settings.MONGODB_URL,
         serverSelectionTimeoutMS=5000,
     )
+    app.state.vectordb_client = None
 
     try:
-        # Verify that MongoDB is reachable.
         await mongo_conn.admin.command("ping")
 
         app.state.mongo_conn = mongo_conn
@@ -27,7 +26,6 @@ async def lifespan(app: FastAPI):
         llm_provider_factory = LLMProviderFactory(settings)
         vectordb_provider_factory = VectorDBProviderFactory(settings)
 
-        # generation client
         app.state.generation_client = llm_provider_factory.create(
             provider=settings.GENERATION_BACKEND
         )
@@ -35,7 +33,6 @@ async def lifespan(app: FastAPI):
             model_id=settings.GENERATION_MODEL_ID
         )
 
-        # embedding client
         app.state.embedding_client = llm_provider_factory.create(
             provider=settings.EMBEDDING_BACKEND
         )
@@ -44,21 +41,21 @@ async def lifespan(app: FastAPI):
             embedding_size=settings.EMBEDDING_MODEL_SIZE,
         )
 
-        # vector db client
-        app.vectordb_client = vectordb_provider_factory.create(
+        app.state.vectordb_client = vectordb_provider_factory.create(
             provider=settings.VECTOR_DB_BACKEND
         )
-        app.vectordb_client.connect()
+        app.state.vectordb_client.connect()
 
-        yield  # ---- App serves requests here ----
+        yield
 
     finally:
-        # ---- Shutdown ----
         mongo_conn.close()
-        app.vectordb_client.disconnect()
+        if app.state.vectordb_client is not None:
+            app.state.vectordb_client.disconnect()
 
 
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(base.base_router)
 app.include_router(data.data_router)
+app.include_router(nlp.nlp_router)
