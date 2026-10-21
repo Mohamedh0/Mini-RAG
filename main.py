@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from src.mini_rag.helpers.config import get_settings
 from src.mini_rag.stores.llm.LLMProviderFactory import LLMProviderFactory
 from src.mini_rag.stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
+from src.mini_rag.stores.llm.templates.template_parser import TemplateParser
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -45,6 +46,11 @@ async def lifespan(app: FastAPI):
             provider=settings.VECTOR_DB_BACKEND
         )
         app.state.vectordb_client.connect()
+
+        app.state.template_parser = TemplateParser(
+            language=settings.PRIMARY_LANG,
+            default_language=settings.DEFAULT_LANG,
+        )
 
         yield
 
