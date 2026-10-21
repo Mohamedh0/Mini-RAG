@@ -3,6 +3,7 @@ from ..VectorDBInterface import VectorDBInterface
 from ..VectorDBEnums import DistanceMethodEnums
 import logging
 from typing import List
+from mini_rag.models.db_schemes import RetrievedDocument
 
 
 class QdrantDBProvider(VectorDBInterface):
@@ -135,11 +136,21 @@ class QdrantDBProvider(VectorDBInterface):
 
     def search_by_vector(self, collection_name: str, vector: list, limit: int = 5):
 
-        result = self.client.query_points(
+        response = self.client.query_points(
             collection_name=collection_name,
             query=vector,
             limit=limit,
         )
 
-        return result.points
-    
+        points = response.points
+
+        if not points:
+            return None
+
+        return [
+            RetrievedDocument(
+                score=point.score,
+                text=point.payload["text"],
+            )
+            for point in points
+        ]
