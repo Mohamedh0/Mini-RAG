@@ -10,9 +10,11 @@ This is a minimal implementation of the RAG model for question answering.
 
 1- Download Python from [here](https://www.python.org/)
 
-2- Download uv package manager using the following command via WSL :
+2- Download uv package manager & Dependencies using the following command via WSL :
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+sudo apt update
+sudo apt install libpq-dev gcc python3-dev
 ```
 
 3- Create a new environment using the following command:

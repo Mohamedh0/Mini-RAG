@@ -1,28 +1,38 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 from mini_rag.routes import base, data, nlp
-from motor.motor_asyncio import AsyncIOMotorClient
 from src.mini_rag.helpers.config import get_settings
 from src.mini_rag.stores.llm.LLMProviderFactory import LLMProviderFactory
-from src.mini_rag.stores.vectordb.VectorDBProviderFactory import VectorDBProviderFactory
 from src.mini_rag.stores.llm.templates.template_parser import TemplateParser
-from contextlib import asynccontextmanager
+from src.mini_rag.stores.vectordb.VectorDBProviderFactory import (
+    VectorDBProviderFactory,
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    mongo_conn = AsyncIOMotorClient(
-        settings.MONGODB_URL,
-        serverSelectionTimeoutMS=5000,
+    postgres_conn = (
+        f"postgresql+asyncpg://{settings.POSTGRES_USERNAME}:{settings.POSTGRES_PASSWORD}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_MAIN_DATABASE}"
+    )
+
+    app.state.db_engine = create_async_engine(postgres_conn)
+    app.state.db_client = sessionmaker(
+        app.state.db_engine, class_=AsyncSession, expire_on_commit=False
     )
     app.state.vectordb_client = None
 
     try:
-        await mongo_conn.admin.command("ping")
-
-        app.state.mongo_conn = mongo_conn
-        app.state.db_client = mongo_conn[settings.MONGODB_DATABASE]
+        # Fail fast if PostgreSQL is unreachable 
+        async with app.state.db_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
 
         llm_provider_factory = LLMProviderFactory(settings)
         vectordb_provider_factory = VectorDBProviderFactory(settings)
@@ -55,7 +65,7 @@ async def lifespan(app: FastAPI):
         yield
 
     finally:
-        mongo_conn.close()
+        await app.state.db_engine.dispose()
         if app.state.vectordb_client is not None:
             app.state.vectordb_client.disconnect()
 
