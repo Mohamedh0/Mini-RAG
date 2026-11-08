@@ -6,10 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from mini_rag.routes import base, data, nlp
-from src.mini_rag.helpers.config import get_settings
-from src.mini_rag.stores.llm.LLMProviderFactory import LLMProviderFactory
-from src.mini_rag.stores.llm.templates.template_parser import TemplateParser
-from src.mini_rag.stores.vectordb.VectorDBProviderFactory import (
+from mini_rag.helpers.config import get_settings
+from mini_rag.stores.llm.LLMProviderFactory import LLMProviderFactory
+from mini_rag.stores.llm.templates.template_parser import TemplateParser
+from mini_rag.stores.vectordb.VectorDBProviderFactory import (
     VectorDBProviderFactory,
 )
 
@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("SELECT 1"))
 
         llm_provider_factory = LLMProviderFactory(settings)
-        vectordb_provider_factory = VectorDBProviderFactory(settings)
+        vectordb_provider_factory = VectorDBProviderFactory(settings, db_client=app.state.db_client)
 
         app.state.generation_client = llm_provider_factory.create(
             provider=settings.GENERATION_BACKEND
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
         app.state.vectordb_client = vectordb_provider_factory.create(
             provider=settings.VECTOR_DB_BACKEND
         )
-        app.state.vectordb_client.connect()
+        await app.state.vectordb_client.connect()
 
         app.state.template_parser = TemplateParser(
             language=settings.PRIMARY_LANG,
@@ -67,7 +67,7 @@ async def lifespan(app: FastAPI):
     finally:
         await app.state.db_engine.dispose()
         if app.state.vectordb_client is not None:
-            app.state.vectordb_client.disconnect()
+            await app.state.vectordb_client.disconnect()
 
 
 app = FastAPI(lifespan=lifespan)
