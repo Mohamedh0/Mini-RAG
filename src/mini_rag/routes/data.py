@@ -5,7 +5,7 @@ import aiofiles
 from fastapi import APIRouter, Depends, UploadFile, status, Request
 from fastapi.responses import JSONResponse
 
-from mini_rag.controllers import DataController, ProjectController, ProcessController
+from mini_rag.controllers import DataController, ProjectController, ProcessController, NLPController
 from mini_rag.helpers.config import Settings, get_settings
 from mini_rag.models import ResponseSignal
 from .schemas.data import ProcessRequest
@@ -99,6 +99,10 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
     do_reset = process_request.do_reset
 
     db_client = request.app.state.db_client
+    vectordb_client = request.app.state.vectordb_client
+    generation_client = request.app.state.generation_client
+    embedding_client = request.app.state.embedding_client
+    template_parser = request.app.state.template_parser
 
     project_model = await ProjectModel.create_instance(
         db_client=db_client,
@@ -106,6 +110,13 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
 
     project = await project_model.get_project_or_create_one(
         project_id=project_id
+    )
+
+    nlp_controller = NLPController(
+        vectordb_client=vectordb_client,
+        generation_client=generation_client,
+        embedding_client=embedding_client,
+        template_parser=template_parser,
     )
 
     asset_model = await AssetModel.create_instance(
@@ -162,6 +173,10 @@ async def process_endpoint(request: Request, project_id: int, process_request: P
                     )
 
     if do_reset == 1:
+        collection_name = nlp_controller.create_collection_name(project_id=project.project_id)
+
+        _ = await request.app.state.vectordb_client.delete_collection(collection_name=collection_name)
+
         _ = await chunk_model.delete_chunks_by_project_id(
             project_id=project.project_id
         )
